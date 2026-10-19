@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" type="image/svg+xml" href="https://yuriybortnik.com/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="https://yuriybortnik.com/favicon-32.png">
+<link rel="apple-touch-icon" href="https://yuriybortnik.com/apple-touch-icon.png">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Psychosis preceptorship exam</title>
+<link rel="stylesheet" href="quiz.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <img src="" width="50" height="56" alt="YB crest">
+    <p>Preceptorship exam. 25 items. Answers after you submit.</p>
+  </div>
+</header>
+<main>
+  <section id="start" class="card">
+    <p class="kicker">Clinic exam</p>
+    <h2>Psychosis</h2>
+    <p>Twenty-five items. One answer per item.</p>
+    <p class="note">Work it like clinic. No looking ahead. Close the tab if you need to. This browser will keep your answers so you can continue. Use Reset exam if you want a clean start. After you submit you get a full review of every item.</p>
+    <label class="field" for="studentName">Your name</label>
+    <input id="studentName" type="text" autocomplete="name" placeholder="Name for the review copy">
+    <div class="row">
+      <button id="beginBtn" type="button">Start exam</button>
+      <button class="ghost" id="resetStartBtn" type="button">Reset exam</button>
+    </div>
+  </section>
+  <section id="quiz" class="card hidden">
+    <p class="progress" id="progress"></p>
+    <p class="kicker" id="meta"></p>
+    <p class="stem" id="stem"></p>
+    <div id="choices"></div>
+    <div class="row">
+      <button class="ghost" id="prevBtn" type="button">Back</button>
+      <button id="nextBtn" type="button">Next</button>
+      <button class="ghost" id="resetQuizBtn" type="button">Reset exam</button>
+    </div>
+  </section>
+  <section id="results" class="card hidden">
+    <p class="kicker">Submitted</p>
+    <p class="score" id="scoreLine"></p>
+    <p class="note" id="missedIntro"></p>
+    <p class="note" id="sendStatus"></p>
+    <div id="review"></div>
+    <div id="sendBox" style="margin-top:1.2rem;padding-top:1rem;border-top:1px solid var(--line)">
+      <p class="note">Submit and Send grades the exam and sends from this page. It does not open the phone mail app. Work stays saved until you reset.</p>
+      <div class="row">
+        <button class="ghost" id="copyBtn" type="button">Copy summary</button>
+        <button class="ghost" id="resetDoneBtn" type="button">Reset exam</button>
+      </div>
+      <textarea id="summaryBox" readonly rows="8"></textarea>
+    </div>
+  </section>
+</main>
+<footer>For Abigail and Polina only. Answer key available after.</footer>
+<script src="items.js"></script>
+<script>
+const EMAIL_HOST = ["moshe", "agentmail.to"].join("@");
+const EXAM_LABEL = "Psychosis";
+const HOST_URL = "https://psychosisquiz.yuriybortnik.com";
+const STORE = "psychosisquiz.v1";
+let idx = 0;
+const picks = Array(ITEMS.length).fill(null);
+const $ = (id) => document.getElementById(id);
+function cookieGet(name) {
+  const hit = document.cookie.split("; ").find((p) => p.startsWith(name + "="));
+  return hit ? decodeURIComponent(hit.slice(name.length + 1)) : "";
+}
+function readStore() {
+  try {
+    const raw = localStorage.getItem(STORE) || cookieGet(STORE);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function clearStore() {
+  try { localStorage.removeItem(STORE); } catch (e) {}
+  document.cookie = STORE + "=;max-age=0;path=/;SameSite=Lax";
+}
+function resetExam() {
+  if (!confirm("Erase this attempt and start from question 1?")) return;
+  for (let i = 0; i < picks.length; i++) picks[i] = null;
+  idx = 0;
+  lastGrade = null;
+  clearStore();
+  $("beginBtn").textContent = "Start exam";
+  $("quiz").classList.add("hidden");
+  $("results").classList.add("hidden");
+  $("start").classList.remove("hidden");
+  window.scrollTo(0, 0);
+}
+function writeStore(extra) {
+  const payload = JSON.stringify({
+    name: $("studentName").value.trim(),
+    idx: idx,
+    picks: picks,
+    submitted: !!(extra && extra.submitted)
+  });
+  try { localStorage.setItem(STORE, payload); } catch (e) {}
+  document.cookie = STORE + "=" + encodeURIComponent(payload) + ";max-age=" + (60*60*24*14) + ";path=/;SameSite=Lax";
+}
+function renderQuestion() {
+  const item = ITEMS[idx];
+  $("progress").textContent = "Question " + item.n + " of " + ITEMS.length;
+  $("meta").textContent = "Type " + item.type;
+  $("stem").textContent = item.stem;
+  const box = $("choices");
+  box.innerHTML = "";
+  Object.keys(item.choices).forEach((letter) => {
+    const lab = document.createElement("label");
+    lab.className = "choice";
+    const inp = document.createElement("input");
+    inp.type = "radio";
+    inp.name = "q";
+    inp.value = letter;
+    if (picks[idx] === letter) inp.checked = true;
+    inp.addEventListener("change", () => { picks[idx] = letter; writeStore(); });
+    lab.appendChild(inp);
+    lab.appendChild(document.createTextNode(letter + ". " + item.choices[letter]));
+    box.appendChild(lab);
+  });
+  $("prevBtn").disabled = idx === 0;
+  $("nextBtn").textContent = idx === ITEMS.length - 1 ? "Submit and Send" : "Next";
+}
+function grade() {
+  let correct = 0;
+  const missed = [];
+  const review = $("review");
+  review.innerHTML = "";
+  ITEMS.forEach((item, i) => {
+    const chosen = picks[i] || "No answer";
+    const ok = chosen === item.answer;
+    if (ok) correct += 1;
+    else missed.push({ item, chosen });
+    const div = document.createElement("div");
+    div.className = "item";
+    const choseTxt = item.choices[chosen] ? chosen + ". " + item.choices[chosen] : chosen;
+    const rightTxt = item.answer + ". " + item.choices[item.answer];
+    div.innerHTML =
+      "<p class=\"verdict " + (ok ? "ok" : "bad") + "\">" + (ok ? "Correct" : "Missed") + " \u00b7 Item " + item.n + "</p>" +
+      "<p><strong>" + item.stem + "</strong></p>" +
+      "<p>You chose " + choseTxt + "</p>" +
+      "<p>Correct answer " + rightTxt + "</p>" +
+      "<p class=\"note\">" + item.rationale + "</p>";
+    review.appendChild(div);
+  });
+  $("scoreLine").textContent = correct + " / " + ITEMS.length;
+  $("missedIntro").textContent = (missed.length ? missed.length + " missed." : "Clean sheet.") + " Every item is listed below with your pick, the correct answer, and why.";
+  return { correct, missed };
+}
+let lastGrade = null;
+$("resetStartBtn").addEventListener("click", resetExam);
+$("resetQuizBtn").addEventListener("click", resetExam);
+$("resetDoneBtn").addEventListener("click", resetExam);
+$("beginBtn").addEventListener("click", () => {
+  $("start").classList.add("hidden");
+  $("quiz").classList.remove("hidden");
+  renderQuestion();
+  writeStore();
+  window.scrollTo(0, 0);
+});
+(function resume() {
+  const saved = readStore();
+  if (!saved) return;
+  if (saved.name) $("studentName").value = saved.name;
+  if (Array.isArray(saved.picks) && saved.picks.length === ITEMS.length) {
+    saved.picks.forEach((v, i) => { picks[i] = v; });
+  }
+  if (typeof saved.idx === "number") idx = saved.idx;
+  if (saved.submitted) {
+    lastGrade = grade();
+    fillSummaryBox();
+    $("start").classList.add("hidden");
+    $("quiz").classList.add("hidden");
+    $("results").classList.remove("hidden");
+    return;
+  }
+  if (picks.filter(Boolean).length || saved.idx) $("beginBtn").textContent = "Continue exam";
+})();
+$("prevBtn").addEventListener("click", () => {
+  if (idx > 0) { idx -= 1; renderQuestion(); writeStore(); window.scrollTo(0, 0); }
+});
+async function sendResults() {
+  if (!lastGrade) return;
+  const name = $("studentName").value.trim() || "Unnamed student";
+  const message = buildSummary(true);
+  fillSummaryBox();
+  $("sendStatus").textContent = "Sending from this page\u2026";
+  try {
+    const body = new FormData();
+    body.append("_subject", "For Elisheva to review and discuss with Yuriy");
+    body.append("_template", "box");
+    body.append("_captcha", "false");
+    body.append("_url", HOST_URL);
+    body.append("name", name);
+    body.append("score", lastGrade.correct + " / " + ITEMS.length);
+    body.append("message", message);
+    const res = await fetch("https://formsubmit.co/ajax/" + EMAIL_HOST, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      body
+    });
+    const data = await res.json().catch(() => ({}));
+    const okFlag = data && String(data.success) === "true";
+    const msg = (data && data.message) ? String(data.message) : "";
+    if (okFlag) {
+      $("sendStatus").textContent = "Sent from this page. Your preceptor will see the misses.";
+      return;
+    }
+    if (/activat/i.test(msg)) {
+      await copySummary();
+      $("sendStatus").textContent = "Queued from this page. Summary is also copied below.";
+      return;
+    }
+    throw new Error(msg || "send failed");
+  } catch (err) {
+    await copySummary();
+    $("sendStatus").textContent = "Browser send did not go through. Summary is in the box. Copy it.";
+  }
+}
+$("nextBtn").addEventListener("click", async () => {
+  if (idx < ITEMS.length - 1) {
+    idx += 1;
+    renderQuestion();
+    writeStore();
+    window.scrollTo(0, 0);
+    return;
+  }
+  lastGrade = grade();
+  fillSummaryBox();
+  writeStore({ submitted: true });
+  $("quiz").classList.add("hidden");
+  $("results").classList.remove("hidden");
+  window.scrollTo(0, 0);
+  await sendResults();
+});
+function buildSummary(includeRationale) {
+  if (!lastGrade) return "";
+  const name = $("studentName").value.trim() || "Unnamed student";
+  const missed = lastGrade.missed;
+  const lines = [
+    "Student: " + name,
+    "Exam: " + EXAM_LABEL,
+    "Score: " + lastGrade.correct + " / " + ITEMS.length,
+    "Picks: " + ITEMS.map((it, i) => it.n + (picks[i] || "-")).join(" "),
+    "",
+    missed.length ? "Missed items:" : "No items missed."
+  ];
+  missed.forEach(({ item, chosen }) => {
+    lines.push("");
+    lines.push("Item " + item.n);
+    lines.push(item.stem);
+    lines.push("Chose: " + chosen + " - " + (item.choices[chosen] || ""));
+    lines.push("Correct: " + item.answer + " - " + item.choices[item.answer]);
+    if (includeRationale) lines.push(item.rationale);
+  });
+  return lines.join("\n");
+}
+function fillSummaryBox() {
+  const text = buildSummary(false);
+  const box = $("summaryBox");
+  if (box) box.value = text;
+  return text;
+}
+async function copySummary() {
+  const text = fillSummaryBox();
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    try {
+      const box = $("summaryBox");
+      box.focus();
+      box.select();
+      document.execCommand("copy");
+      return true;
+    } catch (e2) {
+      return false;
+    }
+  }
+}
+$("copyBtn").addEventListener("click", async () => {
+  if (!lastGrade) return;
+  const ok = await copySummary();
+  $("sendStatus").textContent = ok
+    ? "Summary copied. Paste it wherever you send review notes."
+    : "Copy blocked. Select the text in the box and copy it.";
+});
+</script>
+<script src="yb-crest.js"></script>
+</body>
+</html>
